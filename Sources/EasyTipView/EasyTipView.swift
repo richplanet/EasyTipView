@@ -246,11 +246,11 @@ open class EasyTipView: UIView {
     public struct Preferences {
         
         public struct Drawing {
-            public var cornerRadius        = CGFloat(5)
-            public var arrowHeight         = CGFloat(5)
+            public var cornerRadius        = CGFloat(6)
+            public var arrowHeight         = CGFloat(6)
             public var arrowWidth          = CGFloat(10)
             public var foregroundColor     = UIColor.white
-            public var backgroundColor     = UIColor.red
+            public var backgroundColor     = UIColor(red: 255/255, green: 155/0, blue: 0/255, alpha: 1)
             public var arrowPosition       = ArrowPosition.any
             public var textAlignment       = NSTextAlignment.center
             public var borderWidth         = CGFloat(0)
@@ -264,7 +264,7 @@ open class EasyTipView: UIView {
         
         public struct Positioning {
             public var bubbleInsets         = UIEdgeInsets(top: 1.0, left: 1.0, bottom: 1.0, right: 1.0)
-            public var contentInsets        = UIEdgeInsets(top: 10.0, left: 10.0, bottom: 10.0, right: 10.0)
+            public var contentInsets        = UIEdgeInsets(top: 5.0, left: 8.0, bottom: 5.0, right: 8.0)
             public var maxWidth             = CGFloat(200)
         }
         
