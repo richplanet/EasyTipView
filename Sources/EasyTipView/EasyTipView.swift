@@ -174,9 +174,12 @@ public extension EasyTipView {
         }
         
         if animated {
-            UIView.animate(withDuration: preferences.animating.showDuration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: velocity, options: [.curveEaseInOut], animations: animations, completion: nil)
+            UIView.animate(withDuration: preferences.animating.showDuration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: velocity, options: [.curveEaseInOut], animations: animations, completion: { [weak self] _ in
+                self?.startVerticalShake()
+            })
         }else{
             animations()
+            self.startVerticalShake()
         }
     }
     
@@ -199,6 +202,28 @@ public extension EasyTipView {
             self.removeFromSuperview()
             self.transform = CGAffineTransform.identity
         }
+    }
+    
+    // EasyTipView Vertical Shake Start
+    func startVerticalShake(verticalShakeOffset: CGFloat? = nil) {
+        if let verticalShakeOffset {
+            preferences.animating.verticalShakeOffset = verticalShakeOffset
+        }
+        
+        if preferences.isVerticalShake {
+            let layerAnimation = CABasicAnimation(keyPath: "position")
+            layerAnimation.fromValue = self.layer.position
+            layerAnimation.toValue = CGPoint(x: self.layer.position.x, y: self.layer.position.y + preferences.animating.verticalShakeOffset)
+            layerAnimation.duration = preferences.animating.verticalShakeDuration
+            layerAnimation.repeatCount = .infinity
+            layerAnimation.autoreverses = true
+            self.layer.add(layerAnimation, forKey: "position")
+        }
+    }
+    
+    // EasyTipView Vertical Shake Stop
+    func stopVerticalShake() {
+        self.layer.removeAnimation(forKey: "position")
     }
 }
 
@@ -254,6 +279,8 @@ open class EasyTipView: UIView {
             public var showDuration         = 0.7
             public var dismissDuration      = 0.7
             public var dismissOnTap         = true
+            public var verticalShakeOffset      = CGFloat(0)
+            public var verticalShakeDuration    = CGFloat(0.4)
         }
         
         public var drawing      = Drawing()
@@ -265,6 +292,10 @@ open class EasyTipView: UIView {
         
         public var hasShadow : Bool {
             return drawing.shadowOpacity > 0 && drawing.shadowColor != UIColor.clear
+        }
+        
+        public var isVerticalShake : Bool {
+            return animating.verticalShakeOffset != 0
         }
         
         public init() {}
