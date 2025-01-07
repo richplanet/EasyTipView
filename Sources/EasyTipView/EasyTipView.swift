@@ -266,6 +266,9 @@ open class EasyTipView: UIView {
             public var bubbleInsets         = UIEdgeInsets(top: 4.0, left: 10.0, bottom: 4.0, right: 10.0)
             public var contentInsets        = UIEdgeInsets(top: 5.0, left: 8.0, bottom: 5.0, right: 8.0)
             public var maxWidth             = CGFloat(200)
+            public var ignoreAdjustHorizontalFrame  = false
+            public var ignoreAdjustVerticalFrame    = false
+            public var ignoreFrameValid             = false
         }
         
         public struct Animating {
@@ -492,17 +495,21 @@ open class EasyTipView: UIView {
     fileprivate func adjustFrame(_ frame: inout CGRect, forSuperviewFrame superviewFrame: CGRect) {
         
         // adjust horizontally
-        if frame.x < 0 {
-            frame.x =  0
-        } else if frame.maxX > superviewFrame.width {
-            frame.x = superviewFrame.width - frame.width
+        if preferences.positioning.ignoreAdjustHorizontalFrame == false {
+            if frame.x < 0 {
+                frame.x =  0
+            } else if frame.maxX > superviewFrame.width {
+                frame.x = superviewFrame.width - frame.width
+            }
         }
         
         //adjust vertically
-        if frame.y < 0 {
-            frame.y = 0
-        } else if frame.maxY > superviewFrame.maxY {
-            frame.y = superviewFrame.height - frame.height
+        if preferences.positioning.ignoreAdjustVerticalFrame == false {
+            if frame.y < 0 {
+                frame.y = 0
+            } else if frame.maxY > superviewFrame.maxY {
+                frame.y = superviewFrame.height - frame.height
+            }
         }
     }
     
@@ -525,19 +532,21 @@ open class EasyTipView: UIView {
         
         var frame = computeFrame(arrowPosition: position, refViewFrame: refViewFrame, superviewFrame: superviewFrame)
         
-        if !isFrameValid(frame, forRefViewFrame: refViewFrame, withinSuperviewFrame: superviewFrame) {
-            for value in ArrowPosition.allValues where value != position {
-                let newFrame = computeFrame(arrowPosition: value, refViewFrame: refViewFrame, superviewFrame: superviewFrame)
-                if isFrameValid(newFrame, forRefViewFrame: refViewFrame, withinSuperviewFrame: superviewFrame) {
-                    
-                    if position != .any {
-                        print("[EasyTipView - Info] The arrow position you chose <\(position)> could not be applied. Instead, position <\(value)> has been applied! Please specify position <\(ArrowPosition.any)> if you want EasyTipView to choose a position for you.")
+        if preferences.positioning.ignoreFrameValid == false {
+            if !isFrameValid(frame, forRefViewFrame: refViewFrame, withinSuperviewFrame: superviewFrame) {
+                for value in ArrowPosition.allValues where value != position {
+                    let newFrame = computeFrame(arrowPosition: value, refViewFrame: refViewFrame, superviewFrame: superviewFrame)
+                    if isFrameValid(newFrame, forRefViewFrame: refViewFrame, withinSuperviewFrame: superviewFrame) {
+                        
+                        if position != .any {
+                            print("[EasyTipView - Info] The arrow position you chose <\(position)> could not be applied. Instead, position <\(value)> has been applied! Please specify position <\(ArrowPosition.any)> if you want EasyTipView to choose a position for you.")
+                        }
+                        
+                        frame = newFrame
+                        position = value
+                        preferences.drawing.arrowPosition = value
+                        break
                     }
-                    
-                    frame = newFrame
-                    position = value
-                    preferences.drawing.arrowPosition = value
-                    break
                 }
             }
         }
