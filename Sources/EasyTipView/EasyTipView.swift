@@ -250,7 +250,7 @@ open class EasyTipView: UIView {
             public var arrowHeight         = CGFloat(6)
             public var arrowWidth          = CGFloat(10)
             public var foregroundColor     = UIColor.white
-            public var backgroundColor     = UIColor(red: 255/255, green: 155/0, blue: 0/255, alpha: 1)
+            public var backgroundColor     = UIColor(red: 255.0/255.0, green: 155.0/255.0, blue: 0.0/255.0, alpha: 1)
             public var arrowPosition       = ArrowPosition.any
             public var textAlignment       = NSTextAlignment.center
             public var borderWidth         = CGFloat(0)
@@ -263,7 +263,7 @@ open class EasyTipView: UIView {
         }
         
         public struct Positioning {
-            public var bubbleInsets         = UIEdgeInsets(top: 1.0, left: 1.0, bottom: 1.0, right: 1.0)
+            public var bubbleInsets         = UIEdgeInsets(top: 4.0, left: 10.0, bottom: 4.0, right: 10.0)
             public var contentInsets        = UIEdgeInsets(top: 5.0, left: 8.0, bottom: 5.0, right: 8.0)
             public var maxWidth             = CGFloat(200)
         }
