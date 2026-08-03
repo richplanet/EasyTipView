@@ -269,6 +269,7 @@ open class EasyTipView: UIView {
             public var ignoreAdjustHorizontalFrame  = false
             public var ignoreAdjustVerticalFrame    = false
             public var ignoreFrameValid             = false
+            public var offset               = CGPoint.zero
         }
         
         public struct Animating {
@@ -486,6 +487,9 @@ open class EasyTipView: UIView {
             xOrigin = refViewFrame.x + refViewFrame.width
             yOrigin = refViewFrame.center.y - tipViewSize.height / 2
         }
+        
+        xOrigin += preferences.positioning.offset.x
+        yOrigin += preferences.positioning.offset.y
         
         var frame = CGRect(x: xOrigin, y: yOrigin, width: tipViewSize.width, height: tipViewSize.height)
         adjustFrame(&frame, forSuperviewFrame: superviewFrame)
