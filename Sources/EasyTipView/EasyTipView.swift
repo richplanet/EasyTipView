@@ -204,6 +204,36 @@ public extension EasyTipView {
         }
     }
     
+    /// 현재 표시 중인 Tooltip의 위치를 다시 계산합니다.
+    /// 화면 회전, Split View, Stage Manager 등으로 레이아웃이 변경된 후
+    /// 기준 View(`presentingView`)의 변경된 위치를 기준으로 Tooltip을 다시 배치합니다.
+    /// Vertical Shake가 실행 중인 경우 새 위치를 기준으로 Shake 애니메이션을 다시 시작합니다.
+    func updatePosition() {
+        guard let superview, presentingView != nil else { return }
+
+        // 현재 Vertical Shake 애니메이션 실행 여부 확인
+        let isShaking = layer.animation(forKey: "position") != nil
+
+        // 기존 위치를 기준으로 실행 중인 Shake 중지
+        if isShaking {
+            stopVerticalShake()
+        }
+
+        // 기준 View와 상위 View의 최신 레이아웃 반영
+        superview.layoutIfNeeded()
+
+        // 변경된 기준 View 위치를 바탕으로 Tooltip 위치 재계산
+        arrange(withinSuperview: superview)
+
+        // Arrow 위치 등 다시 그리기
+        setNeedsDisplay()
+
+        // 변경된 위치를 기준으로 Shake 다시 시작
+        if isShaking {
+            startVerticalShake()
+        }
+    }
+    
     // EasyTipView Vertical Shake Start
     func startVerticalShake(verticalShakeOffset: CGFloat? = nil) {
         if let verticalShakeOffset {
