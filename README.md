@@ -216,6 +216,18 @@ Calling `updatePosition(forContainerSize:with:)` turns off the notification base
 
 To re-arrange the tip view at any other time (for example after changing the layout of the view it points to) use `updatePosition(animated:)`.
 
+### Following the presenting view automatically
+
+If the view the tip points to can move for reasons you do not control (a navigation bar that slides away while scrolling, a stack view that re-lays out when the safe area changes late, ...), set `followPresentingView`:
+
+```swift
+preferences.positioning.followPresentingView = true
+```
+
+The tip view then observes the `position`, `bounds` and `transform` of the presenting view and of all its superviews up to the superview the tip is shown in, and moves in the same moment the observed view moves. A change made inside an animation block is followed with the same animation, an immediate change is followed immediately, so the tip and the view it points to never get out of sync. No `updatePosition` calls are needed, and the notification based `autoUpdateOnRotation` is not used while this option is on. The tip is redrawn only when the arrow actually changes, so it is cheap to use while scrolling.
+
+The observation stops when the tip view is dismissed. The alpha of the tip is not mirrored from the presenting view hierarchy.
+
 <a name="license"> License </a>
 --------------
 

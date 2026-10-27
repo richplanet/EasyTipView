@@ -234,6 +234,80 @@ class Tests: XCTestCase {
         XCTAssertNil(tipView.layer.animation(forKey: "verticalShake"), "Shake should be removed")
     }
 
+    // MARK: - followPresentingView
+    
+    func testFollowPresentingViewTracksPresentingViewWithoutUpdatePosition() {
+        view.center = superview.center
+        
+        var preferences = EasyTipView.Preferences()
+        preferences.drawing.arrowPosition = .top
+        preferences.positioning.followPresentingView = true
+        
+        let tipView = EasyTipView(text: "Some text", preferences: preferences)
+        tipView.show(animated: false, forView: view, withinSuperview: superview)
+        
+        view.frame.origin.x = 50
+        
+        XCTAssertEqual(tipView.frame.midX, view.frame.midX, accuracy: 0.5, "EasyTipView should follow the presenting view")
+        XCTAssertEqual(tipView.frame.minY, view.frame.maxY, "EasyTipView should stay below the presenting view")
+    }
+    
+    func testFollowPresentingViewTracksMovingAncestor() {
+        let container = UIView(frame: CGRect(x: 0, y: 0, width: 600, height: 100))
+        superview.addSubview(container)
+        container.addSubview(view)
+        view.frame = CGRect(x: 250, y: 20, width: 100, height: 60)
+        
+        var preferences = EasyTipView.Preferences()
+        preferences.drawing.arrowPosition = .top
+        preferences.positioning.followPresentingView = true
+        
+        let tipView = EasyTipView(text: "Some text", preferences: preferences)
+        tipView.show(animated: false, forView: view, withinSuperview: superview)
+        let initialY = tipView.frame.minY
+        
+        // 스크롤로 바가 위쪽으로 밀려나는 상황: 상위 View만 움직여도 따라가야 한다
+        container.frame.origin.y = -20
+        
+        XCTAssertEqual(tipView.frame.minY, initialY - 20, accuracy: 0.5, "EasyTipView should follow a moving ancestor of the presenting view")
+    }
+    
+    func testFollowPresentingViewIsOffByDefault() {
+        view.center = superview.center
+        
+        var preferences = EasyTipView.Preferences()
+        preferences.drawing.arrowPosition = .top
+        
+        let tipView = EasyTipView(text: "Some text", preferences: preferences)
+        tipView.show(animated: false, forView: view, withinSuperview: superview)
+        let initialMidX = tipView.frame.midX
+        
+        view.frame.origin.x = 50
+        
+        XCTAssertEqual(tipView.frame.midX, initialMidX, "EasyTipView should not move by itself unless followPresentingView is set")
+    }
+    
+    func testFollowPresentingViewStopsAfterDismiss() {
+        view.center = superview.center
+        
+        var preferences = EasyTipView.Preferences()
+        preferences.drawing.arrowPosition = .top
+        preferences.positioning.followPresentingView = true
+        
+        let tipView = EasyTipView(text: "Some text", preferences: preferences)
+        tipView.show(animated: false, forView: view, withinSuperview: superview)
+        
+        let dismissed = expectation(description: "dismissed")
+        tipView.dismiss(animated: false) { dismissed.fulfill() }
+        wait(for: [dismissed], timeout: 2)
+        
+        let frameAfterDismiss = tipView.frame
+        view.frame.origin.x = 50
+        
+        XCTAssertNil(tipView.superview, "EasyTipView should be removed")
+        XCTAssertEqual(tipView.frame, frameAfterDismiss, "EasyTipView should stop following after it was dismissed")
+    }
+    
     func testAutoUpdateOnRotationDefaultsToTrue() {
         XCTAssertTrue(EasyTipView.Preferences().positioning.autoUpdateOnRotation)
     }

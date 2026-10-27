@@ -167,7 +167,8 @@ public extension EasyTipView {
         addGestureRecognizer(tap)
         
         superview.addSubview(self)
-        
+        startFollowingPresentingView()
+
         let animations : () -> () = {
             self.transform = finalTransform
             self.alpha = 1
@@ -198,6 +199,7 @@ public extension EasyTipView {
             self.alpha = self.preferences.animating.dismissFinalAlpha
         }) { (finished) -> Void in
             self.delegate?.easyTipViewDidDismiss(self)
+            self.stopFollowingPresentingView()
             self.stopVerticalShake()
             self.removeFromSuperview()
             self.transform = CGAffineTransform.identity
@@ -275,8 +277,9 @@ public extension EasyTipView {
                 self.layer.add(fade, forKey: "arrowPositionFade")
             }
         }, completion: { _ in
-            // 전환이 취소되었거나 최종 layout이 달라진 경우를 대비해 최종 위치 확정
-            rearrange()
+            // 전환이 끝난 뒤 기준 View 위치가 한 번 더 바뀌었거나 전환이 취소된 경우를 대비해 최종 위치를 확정합니다.
+            // 즉시 반영하면 이동이 끝난 뒤 툴팁이 "틱" 튀므로 짧게 애니메이션합니다. 위치가 같으면 아무 일도 일어나지 않습니다.
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction], animations: rearrange)
         })
     }
 
@@ -351,6 +354,11 @@ open class EasyTipView: UIView {
             /// true이면 `UIDevice` 방향 알림을 받아 자동으로 위치를 갱신합니다.
             /// `updatePosition(forContainerSize:with:)`를 호출하면 false로 바뀝니다.
             public var autoUpdateOnRotation = true
+            /// true이면 기준 View와 그 상위 View(`withinSuperview`까지)의 `position`/`bounds`/`transform` 변경을 관찰해
+            /// 변경이 일어나는 순간 Tooltip을 같이 이동시킵니다. 변경이 애니메이션 안에서 일어나면 같은 애니메이션으로,
+            /// 즉시 일어나면 즉시 따라가므로 회전, 스크롤로 인한 바 이동, 늦게 반영되는 safe area 등을 별도 호출 없이 처리합니다.
+            /// 이 옵션이 켜져 있으면 `autoUpdateOnRotation`(UIDevice 알림)은 사용하지 않습니다.
+            public var followPresentingView = false
         }
         
         public struct Animating {
@@ -426,6 +434,8 @@ open class EasyTipView: UIView {
     fileprivate weak var presentingView: UIView?
     fileprivate weak var delegate: EasyTipViewDelegate?
     fileprivate var arrowTip = CGPoint.zero
+    fileprivate var followObservations: [NSKeyValueObservation] = []
+    fileprivate var isFollowingPresentingView = false
     /// 사용자가 요청한 화살표 방향. `preferences.drawing.arrowPosition`은 실제 적용된 방향을 담으므로
     /// 레이아웃이 바뀔 때마다 이 값에서 다시 계산해 원래 방향으로 복귀할 수 있게 합니다.
     fileprivate let requestedArrowPosition: ArrowPosition
@@ -544,15 +554,57 @@ open class EasyTipView: UIView {
     
     @objc func handleRotation() {
         guard preferences.positioning.autoUpdateOnRotation
+              , !preferences.positioning.followPresentingView
               , let sview = superview
               , presentingView != nil else { return }
-        
+
         UIView.animate(withDuration: 0.3) {
             self.arrange(withinSuperview: sview)
             self.setNeedsDisplay()
         }
     }
-    
+
+    // MARK: - Following the presenting view -
+
+    fileprivate func startFollowingPresentingView() {
+        stopFollowingPresentingView()
+
+        guard preferences.positioning.followPresentingView, let superview, let presentingView else { return }
+
+        // 기준 View부터 superview 직전까지의 상위 View는 이동/크기/변형 모두, superview는 bounds(스크롤 offset 등)만 관찰
+        var view: UIView? = presentingView
+        while let current = view, current !== superview {
+            followObservations.append(current.layer.observe(\.position) { [weak self] _, _ in self?.presentingViewDidChange() })
+            followObservations.append(current.layer.observe(\.bounds) { [weak self] _, _ in self?.presentingViewDidChange() })
+            followObservations.append(current.layer.observe(\.transform) { [weak self] _, _ in self?.presentingViewDidChange() })
+            view = current.superview
+        }
+        followObservations.append(superview.layer.observe(\.bounds) { [weak self] _, _ in self?.presentingViewDidChange() })
+    }
+
+    fileprivate func stopFollowingPresentingView() {
+        followObservations.forEach { $0.invalidate() }
+        followObservations.removeAll()
+    }
+
+    /// 관찰 중인 View의 값이 바뀌는 즉시 호출됩니다. 변경이 일어난 애니메이션 컨텍스트를 그대로 이어받습니다.
+    fileprivate func presentingViewDidChange() {
+        guard !isFollowingPresentingView, let superview, presentingView != nil else { return }
+
+        isFollowingPresentingView = true
+        defer { isFollowingPresentingView = false }
+
+        let previousArrowTip = arrowTip
+        let previousArrowPosition = preferences.drawing.arrowPosition
+
+        arrange(withinSuperview: superview)
+
+        // 화살표 모양이 바뀐 경우에만 다시 그립니다. (스크롤처럼 잦은 변경에서 매번 그리지 않도록)
+        if arrowTip != previousArrowTip || preferences.drawing.arrowPosition != previousArrowPosition {
+            setNeedsDisplay()
+        }
+    }
+
     // MARK: - Private methods -
     
     fileprivate func computeFrame(arrowPosition position: ArrowPosition, refViewFrame: CGRect, superviewFrame: CGRect) -> CGRect {
@@ -630,7 +682,7 @@ open class EasyTipView: UIView {
                     let newFrame = computeFrame(arrowPosition: value, refViewFrame: refViewFrame, superviewFrame: superviewFrame)
                     if isFrameValid(newFrame, forRefViewFrame: refViewFrame, withinSuperviewFrame: superviewFrame) {
                         
-                        if position != .any {
+                        if position != .any && value != preferences.drawing.arrowPosition {
                             print("[EasyTipView - Info] The arrow position you chose <\(position)> could not be applied. Instead, position <\(value)> has been applied! Please specify position <\(ArrowPosition.any)> if you want EasyTipView to choose a position for you.")
                         }
                         
