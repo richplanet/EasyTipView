@@ -60,6 +60,12 @@ class ViewController: UIViewController, EasyTipViewDelegate {
         self.toolbarItemAction()
     }
     
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        // 회전/리사이즈 전환 애니메이션과 함께 툴팁 위치 갱신
+        tipView?.updatePosition(forContainerSize: size, with: coordinator)
+    }
+
     func easyTipViewDidTap(_ tipView: EasyTipView) {
         print("\(tipView) did tap!")
     }
@@ -78,7 +84,7 @@ class ViewController: UIViewController, EasyTipViewDelegate {
     
     @IBAction func toolbarItemAction() {
         if let tipView = tipView {
-            tipView.dismiss(withCompletion: { 
+            tipView.dismiss(completion: {
                 print("Completion called!")
             })
         } else {
@@ -88,7 +94,8 @@ class ViewController: UIViewController, EasyTipViewDelegate {
             preferences.drawing.shadowColor = UIColor.black
             preferences.drawing.shadowRadius = 2
             preferences.drawing.shadowOpacity = 0.75
-            
+            preferences.animating.verticalShakeOffset = 6
+
             let tip = EasyTipView(text: text, preferences: preferences, delegate: self)
             tip.show(forItem: toolbarItem)
             tipView = tip

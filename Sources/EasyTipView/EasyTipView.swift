@@ -198,6 +198,7 @@ public extension EasyTipView {
             self.alpha = self.preferences.animating.dismissFinalAlpha
         }) { (finished) -> Void in
             self.delegate?.easyTipViewDidDismiss(self)
+            self.stopVerticalShake()
             self.removeFromSuperview()
             self.transform = CGAffineTransform.identity
             completion?()
@@ -207,53 +208,100 @@ public extension EasyTipView {
     /// 현재 표시 중인 Tooltip의 위치를 다시 계산합니다.
     /// 화면 회전, Split View, Stage Manager 등으로 레이아웃이 변경된 후
     /// 기준 View(`presentingView`)의 변경된 위치를 기준으로 Tooltip을 다시 배치합니다.
-    /// Vertical Shake가 실행 중인 경우 새 위치를 기준으로 Shake 애니메이션을 다시 시작합니다.
-    func updatePosition() {
+    /// Vertical Shake는 additive 애니메이션이라 위치가 바뀌어도 재시작 없이 그대로 이어집니다.
+    ///
+    /// - parameter animated: true이면 이동을 애니메이션으로 처리합니다.
+    func updatePosition(animated: Bool = false) {
         guard let superview, presentingView != nil else { return }
 
-        // 현재 Vertical Shake 애니메이션 실행 여부 확인
-        let isShaking = layer.animation(forKey: "position") != nil
+        let update = {
+            // 기준 View와 상위 View의 최신 레이아웃 반영
+            superview.layoutIfNeeded()
 
-        // 기존 위치를 기준으로 실행 중인 Shake 중지
-        if isShaking {
-            stopVerticalShake()
+            // 변경된 기준 View 위치를 바탕으로 Tooltip 위치 재계산
+            self.arrange(withinSuperview: superview)
+
+            // Arrow 위치 등 다시 그리기
+            self.setNeedsDisplay()
         }
 
-        // 기준 View와 상위 View의 최신 레이아웃 반영
-        superview.layoutIfNeeded()
-
-        // 변경된 기준 View 위치를 바탕으로 Tooltip 위치 재계산
-        arrange(withinSuperview: superview)
-
-        // Arrow 위치 등 다시 그리기
-        setNeedsDisplay()
-
-        // 변경된 위치를 기준으로 Shake 다시 시작
-        if isShaking {
-            startVerticalShake()
+        if animated {
+            UIView.animate(withDuration: 0.3, animations: update)
+        } else {
+            update()
         }
     }
-    
+
+    /// `viewWillTransition(to:with:)`에서 받은 값으로 회전·리사이즈 전환 애니메이션과 함께 Tooltip을 이동시킵니다.
+    ///
+    /// 전환 애니메이션(`coordinator.animate(alongsideTransition:)`) 블록 안에서 위치를 갱신하므로
+    /// 회전과 동일한 duration/curve로 움직입니다. 화살표 방향이 바뀌는 경우에는 말풍선만 cross-dissolve 됩니다.
+    /// 이 메서드를 호출하면 `UIDevice` 알림 기반 자동 갱신(`positioning.autoUpdateOnRotation`)은 꺼집니다.
+    ///
+    /// ```swift
+    /// override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+    ///     super.viewWillTransition(to: size, with: coordinator)
+    ///     tipView?.updatePosition(forContainerSize: size, with: coordinator)
+    /// }
+    /// ```
+    ///
+    /// - parameter size:        `viewWillTransition`으로 전달된 전환 후 크기. Tooltip이 window 위에 있을 때 화면 경계 보정에 사용됩니다.
+    /// - parameter coordinator: `viewWillTransition`으로 전달된 transition coordinator.
+    func updatePosition(forContainerSize size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        guard superview != nil, presentingView != nil else { return }
+
+        preferences.positioning.autoUpdateOnRotation = false
+
+        let rearrange = { [weak self] in
+            guard let self, let superview = self.superview, self.presentingView != nil else { return }
+
+            superview.layoutIfNeeded()
+            // window가 아닌 superview는 전환 중 layout이 갱신되므로 size를 쓰지 않고 superview 자체 크기를 사용
+            self.arrange(withinSuperview: superview, containerSize: superview is UIWindow ? size : nil)
+            self.setNeedsDisplay()
+        }
+
+        coordinator.animate(alongsideTransition: { [weak self] context in
+            guard let self else { return }
+
+            let previousArrowPosition = self.preferences.drawing.arrowPosition
+            rearrange()
+
+            if previousArrowPosition != self.preferences.drawing.arrowPosition {
+                // 화살표 방향이 바뀌면 비트맵은 보간할 수 없으므로 cross-dissolve
+                let fade = CATransition()
+                fade.type = .fade
+                fade.duration = context.transitionDuration
+                self.layer.add(fade, forKey: "arrowPositionFade")
+            }
+        }, completion: { _ in
+            // 전환이 취소되었거나 최종 layout이 달라진 경우를 대비해 최종 위치 확정
+            rearrange()
+        })
+    }
+
     // EasyTipView Vertical Shake Start
+    // position이 아닌 offset(additive)을 애니메이션하므로 frame이 바뀌어도 재시작할 필요가 없습니다.
     func startVerticalShake(verticalShakeOffset: CGFloat? = nil) {
         if let verticalShakeOffset {
             preferences.animating.verticalShakeOffset = verticalShakeOffset
         }
-        
+
         if preferences.isVerticalShake {
-            let layerAnimation = CABasicAnimation(keyPath: "position")
-            layerAnimation.fromValue = self.layer.position
-            layerAnimation.toValue = CGPoint(x: self.layer.position.x, y: self.layer.position.y + preferences.animating.verticalShakeOffset)
+            let layerAnimation = CABasicAnimation(keyPath: "position.y")
+            layerAnimation.isAdditive = true
+            layerAnimation.fromValue = 0
+            layerAnimation.toValue = preferences.animating.verticalShakeOffset
             layerAnimation.duration = preferences.animating.verticalShakeDuration
             layerAnimation.repeatCount = .infinity
             layerAnimation.autoreverses = true
-            self.layer.add(layerAnimation, forKey: "position")
+            self.layer.add(layerAnimation, forKey: "verticalShake")
         }
     }
-    
+
     // EasyTipView Vertical Shake Stop
     func stopVerticalShake() {
-        self.layer.removeAnimation(forKey: "position")
+        self.layer.removeAnimation(forKey: "verticalShake")
     }
 }
 
@@ -300,6 +348,9 @@ open class EasyTipView: UIView {
             public var ignoreAdjustVerticalFrame    = false
             public var ignoreFrameValid             = false
             public var offset               = CGPoint.zero
+            /// true이면 `UIDevice` 방향 알림을 받아 자동으로 위치를 갱신합니다.
+            /// `updatePosition(forContainerSize:with:)`를 호출하면 false로 바뀝니다.
+            public var autoUpdateOnRotation = true
         }
         
         public struct Animating {
@@ -375,6 +426,9 @@ open class EasyTipView: UIView {
     fileprivate weak var presentingView: UIView?
     fileprivate weak var delegate: EasyTipViewDelegate?
     fileprivate var arrowTip = CGPoint.zero
+    /// 사용자가 요청한 화살표 방향. `preferences.drawing.arrowPosition`은 실제 적용된 방향을 담으므로
+    /// 레이아웃이 바뀔 때마다 이 값에서 다시 계산해 원래 방향으로 복귀할 수 있게 합니다.
+    fileprivate let requestedArrowPosition: ArrowPosition
     fileprivate(set) open var preferences: Preferences
     private let content: Content
     
@@ -458,6 +512,7 @@ open class EasyTipView: UIView {
         
         self.content = content
         self.preferences = preferences
+        self.requestedArrowPosition = preferences.drawing.arrowPosition
         self.delegate = delegate
         
         super.init(frame: CGRect.zero)
@@ -488,7 +543,8 @@ open class EasyTipView: UIView {
     // MARK: - Rotation support -
     
     @objc func handleRotation() {
-        guard let sview = superview
+        guard preferences.positioning.autoUpdateOnRotation
+              , let sview = superview
               , presentingView != nil else { return }
         
         UIView.animate(withDuration: 0.3) {
@@ -551,15 +607,17 @@ open class EasyTipView: UIView {
         return !frame.intersects(forRefViewFrame)
     }
     
-    fileprivate func arrange(withinSuperview superview: UIView) {
-        
-        var position = preferences.drawing.arrowPosition
-        
+    fileprivate func arrange(withinSuperview superview: UIView, containerSize: CGSize? = nil) {
+
+        var position = requestedArrowPosition
+
         let refViewFrame = presentingView!.convert(presentingView!.bounds, to: superview);
-        
+
         let superviewFrame: CGRect
         if let scrollview = superview as? UIScrollView {
             superviewFrame = CGRect(origin: scrollview.frame.origin, size: scrollview.contentSize)
+        } else if let containerSize {
+            superviewFrame = CGRect(origin: .zero, size: containerSize)
         } else {
             superviewFrame = superview.frame
         }
@@ -578,13 +636,15 @@ open class EasyTipView: UIView {
                         
                         frame = newFrame
                         position = value
-                        preferences.drawing.arrowPosition = value
                         break
                     }
                 }
             }
         }
-        
+
+        // 요청 방향이 아닌 실제 적용된 방향을 기록 (draw/getBubbleFrame이 참조)
+        preferences.drawing.arrowPosition = position
+
         switch position {
         case .bottom, .top, .any:
             var arrowTipXOrigin: CGFloat
@@ -611,7 +671,9 @@ open class EasyTipView: UIView {
             contentView.frame = getContentRect(from: getBubbleFrame())
         }
         
-        self.frame = frame
+        // transform이 적용된 상태에서도 안전하도록 frame 대신 bounds/center로 반영
+        self.bounds = CGRect(origin: .zero, size: frame.size)
+        self.center = CGPoint(x: frame.midX, y: frame.midY)
     }
     
     // MARK:- Callbacks -

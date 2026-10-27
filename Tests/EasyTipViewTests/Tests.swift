@@ -163,5 +163,79 @@ class Tests: XCTestCase {
         XCTAssert(tipView.preferences.drawing.arrowPosition == .top, "Position should be bottom")
         XCTAssert((tipView.frame).minY == (view.frame).maxY, "EasyTipView should be below the presenting view")
     }
+
+    // MARK: - updatePosition
+
+    func testUpdatePositionFollowsPresentingView() {
+        view.center = superview.center
+
+        var preferences = EasyTipView.Preferences()
+        preferences.drawing.arrowPosition = .top
+
+        let tipView = EasyTipView(text: "Some text", preferences: preferences)
+        tipView.show(animated: false, forView: view, withinSuperview: superview)
+
+        view.frame.origin.x = 50
+        tipView.updatePosition()
+
+        XCTAssert(tipView.frame.midX == view.frame.midX, "EasyTipView should follow the presenting view horizontally")
+        XCTAssert(tipView.frame.minY == view.frame.maxY, "EasyTipView should stay below the presenting view")
+    }
+
+    func testUpdatePositionRestoresRequestedArrowPosition() {
+        var preferences = EasyTipView.Preferences()
+        preferences.drawing.arrowPosition = .top
+
+        // view is at the bottom of the superview, so .top does not fit and falls back to .bottom
+        let tipView = EasyTipView(text: "Some text", preferences: preferences)
+        tipView.show(animated: false, forView: view, withinSuperview: superview)
+        XCTAssert(tipView.preferences.drawing.arrowPosition == .bottom, "Position should fall back to bottom")
+
+        // once there is room again the requested position should be applied again
+        view.frame.origin.y = 100
+        tipView.updatePosition()
+
+        XCTAssert(tipView.preferences.drawing.arrowPosition == .top, "Position should return to the requested top")
+        XCTAssert(tipView.frame.minY == view.frame.maxY, "EasyTipView should be below the presenting view")
+    }
+
+    func testUpdatePositionKeepsAnyPositionAdaptive() {
+        let tipView = EasyTipView(text: "Some text")
+        tipView.show(animated: false, forView: view, withinSuperview: superview)
+        XCTAssert(tipView.preferences.drawing.arrowPosition == .bottom, "Position should be bottom")
+
+        view.frame.origin.y = 0
+        tipView.updatePosition()
+
+        XCTAssert(tipView.preferences.drawing.arrowPosition == .any, "Position should be any again")
+        XCTAssert(tipView.frame.minY == view.frame.maxY, "EasyTipView should be below the presenting view")
+    }
+
+    // MARK: - Vertical shake
+
+    func testVerticalShakeIsAdditiveAndSurvivesUpdatePosition() {
+        view.center = superview.center
+
+        let tipView = EasyTipView(text: "Some text")
+        tipView.show(animated: false, forView: view, withinSuperview: superview)
+        tipView.startVerticalShake(verticalShakeOffset: 8)
+
+        let animation = tipView.layer.animation(forKey: "verticalShake") as? CABasicAnimation
+        XCTAssertNotNil(animation, "Shake animation should be running")
+        XCTAssertEqual(animation?.keyPath, "position.y")
+        XCTAssertEqual(animation?.isAdditive, true, "Shake should be additive so it composes with frame changes")
+
+        view.frame.origin.x = 50
+        tipView.updatePosition()
+
+        XCTAssertNotNil(tipView.layer.animation(forKey: "verticalShake"), "Shake should keep running after updatePosition")
+
+        tipView.stopVerticalShake()
+        XCTAssertNil(tipView.layer.animation(forKey: "verticalShake"), "Shake should be removed")
+    }
+
+    func testAutoUpdateOnRotationDefaultsToTrue() {
+        XCTAssertTrue(EasyTipView.Preferences().positioning.autoUpdateOnRotation)
+    }
 }
 #endif

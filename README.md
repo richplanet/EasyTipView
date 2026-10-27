@@ -22,8 +22,9 @@ Description
 5. [Usage](#usage)
 6. [Customizing the appearance](#customising)
 7. [Customising the presentation and dismissal animations](#customising-animations)
-8. [License](#license)
-9. [Contact](#contact)
+8. [Rotation and resize handling](#rotation)
+9. [License](#license)
+10. [Contact](#contact)
 
 <a name="features"> Features </a>
 --------------
@@ -196,6 +197,24 @@ This produces the following animations:
 For more animations, checkout the example project.
 *Once you configured the animations, a good idea would be to __make these preferences global__, for all future instances of `EasyTipView` by assigning it to ```EasyTipView.globalPreferences```.*
 
+
+<a name="rotation"> Rotation and resize handling </a>
+--------------
+
+By default the tip view listens to `UIDevice` orientation notifications and re-arranges itself on rotation. That notification fires independently of the view controller's transition and does not cover Split View or Stage Manager resizes.
+
+To move the tip view together with the transition (same duration and curve, shake included), forward the values received in `viewWillTransition(to:with:)`:
+
+```swift
+override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+    super.viewWillTransition(to: size, with: coordinator)
+    tipView?.updatePosition(forContainerSize: size, with: coordinator)
+}
+```
+
+Calling `updatePosition(forContainerSize:with:)` turns off the notification based update (`preferences.positioning.autoUpdateOnRotation`), so the tip view is only arranged once per transition. If the arrow direction had to change because the tip did not fit, it goes back to the requested direction as soon as there is room again, and a changed direction is cross-dissolved.
+
+To re-arrange the tip view at any other time (for example after changing the layout of the view it points to) use `updatePosition(animated:)`.
 
 <a name="license"> License </a>
 --------------
